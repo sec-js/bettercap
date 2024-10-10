@@ -17,6 +17,7 @@ import (
 	"github.com/bettercap/bettercap/v2/caplets"
 	"github.com/bettercap/bettercap/v2/core"
 	"github.com/bettercap/bettercap/v2/firewall"
+	my_log "github.com/bettercap/bettercap/v2/log"
 	"github.com/bettercap/bettercap/v2/network"
 	"github.com/bettercap/bettercap/v2/packets"
 
@@ -150,6 +151,7 @@ func New() (*Session, error) {
 
 	if I == nil {
 		I = s
+		my_log.Logger = s.Events.Log
 	}
 
 	return s, nil
@@ -326,6 +328,7 @@ func (s *Session) Start() error {
 	plugin.Defines["fileExists"] = jsFileExistsFunc
 	plugin.Defines["loadJSON"] = jsLoadJSONFunc
 	plugin.Defines["saveJSON"] = jsSaveJSONFunc
+	plugin.Defines["saveToFile"] = jsSaveToFileFunc
 	plugin.Defines["onEvent"] = jsOnEventFunc
 	plugin.Defines["session"] = s
 
@@ -458,10 +461,18 @@ func (s *Session) Run(line string) error {
 	}
 
 	// is it a module command?
-	for _, m := range s.Modules {
-		for _, h := range m.Handlers() {
-			if parsed, args := h.Parse(line); parsed {
-				return h.Exec(args)
+	for _, mod := range s.Modules {
+		for _, modHandler := range mod.Handlers() {
+			if parsed, args := modHandler.Parse(line); parsed {
+				if err := modHandler.Exec(args); err != nil {
+					return err
+				} else if prompt := mod.Prompt(); prompt != "" {
+					// if the module handler has been executed successfully and
+					// the module overrides the prompt, set it
+					s.Env.Set(PromptVariable, prompt)
+					s.Refresh()
+				}
+				return nil
 			}
 		}
 	}
@@ -478,5 +489,5 @@ func (s *Session) Run(line string) error {
 		return nil
 	}
 
-	return fmt.Errorf("unknown or invalid syntax \"%s%s%s\", type %shelp%s for the help menu.", tui.BOLD, line, tui.RESET, tui.BOLD, tui.RESET)
+	return fmt.Errorf("unknown or invalid syntax \"%s%s%s\", type %shelp%s for the help menu", tui.BOLD, line, tui.RESET, tui.BOLD, tui.RESET)
 }
