@@ -104,7 +104,10 @@ func NewWiFiModule(s *session.Session) *WiFiModule {
 	}
 
 	mod.InitState("channels")
+	mod.InitState("channel")
+
 	mod.State.Store("channels", []int{})
+	mod.State.Store("channel", 0)
 
 	mod.AddParam(session.NewStringParameter("wifi.interface",
 		"",
@@ -648,19 +651,22 @@ func (mod *WiFiModule) Configure() error {
 	mod.hopPeriod = time.Duration(hopPeriod) * time.Millisecond
 
 	if mod.source == "" {
-		if freqs, err := network.GetSupportedFrequencies(ifName); err != nil {
-			return fmt.Errorf("error while getting supported frequencies of %s: %s", ifName, err)
-		} else {
-			mod.setFrequencies(freqs)
-		}
+		if len(mod.frequencies) == 0 {
+			if freqs, err := network.GetSupportedFrequencies(ifName); err != nil {
+				return fmt.Errorf("error while getting supported frequencies of %s: %s", ifName, err)
+			} else {
+				mod.setFrequencies(freqs)
+			}
 
-		mod.Debug("wifi supported frequencies: %v", mod.frequencies)
+			mod.Debug("wifi supported frequencies: %v", mod.frequencies)
+		}
 
 		// we need to start somewhere, this is just to check if
 		// this OS supports switching channel programmatically.
 		if err = network.SetInterfaceChannel(ifName, 1); err != nil {
 			return fmt.Errorf("error while initializing %s to channel 1: %s", ifName, err)
 		}
+		mod.State.Store("channel", 1)
 
 		mod.Info("started (min rssi: %d dBm)", mod.minRSSI)
 	}
