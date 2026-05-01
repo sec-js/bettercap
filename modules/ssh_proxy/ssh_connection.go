@@ -39,6 +39,18 @@ func (mod *SSHProxy) handleConnection(tcpConn net.Conn) {
 		mod.Error("[%s] cannot resolve destination: %v", clientAddr, err)
 		return
 	}
+
+	// Safety: if destination resolves to ourselves, don't create a loop
+	proxyAddr := mod.listener.Addr().String()
+	if destHost, destPort, _ := net.SplitHostPort(destAddr); destHost != "" {
+		if proxyHost, _, _ := net.SplitHostPort(proxyAddr); proxyHost != "" {
+			if destHost == proxyHost && destPort == fmt.Sprintf("%d", mod.sshPort) {
+				mod.Warning("[%s] destination %s is the proxy machine itself, skipping to avoid loop", clientAddr, destAddr)
+				return
+			}
+		}
+	}
+
 	mod.Info("[%s] forwarding to %s", clientAddr, destAddr)
 
 	// --- 3. Dial upstream SSH server, replaying credentials ---

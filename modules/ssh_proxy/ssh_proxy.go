@@ -187,6 +187,10 @@ func (mod *SSHProxy) Configure() error {
 
 	if mod.address != "" {
 		mod.Redirection.SrcAddress = mod.address
+	} else {
+		// When intercepting all SSH traffic, exclude the proxy machine's own IP
+		// to prevent redirecting management SSH connections to ourselves (loop).
+		mod.Redirection.ExcludeAddress = proxyAddress
 	}
 
 	if err := mod.Session.Firewall.EnableRedirection(mod.Redirection, true); err != nil {
