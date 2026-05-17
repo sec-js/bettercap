@@ -98,6 +98,7 @@ const ParamIfaceAddress6 = "<interface address6>"
 const ParamIfaceMac = "<interface mac>"
 const ParamSubnet = "<entire subnet>"
 const ParamRandomMAC = "<random mac>"
+const ParamGatewayAddress = "<gateway address>"
 
 var ParamIfaceNameParser = regexp.MustCompile("<([a-zA-Z0-9]{2,16})>")
 
@@ -117,6 +118,8 @@ func (p ModuleParam) parse(s *Session, v string) string {
 		hw := make([]byte, 6)
 		rand.Read(hw)
 		v = net.HardwareAddr(hw).String()
+	case ParamGatewayAddress:
+		v = s.Gateway.IpAddress
 	default:
 		// check the <iface> case
 		if m := ParamIfaceNameParser.FindStringSubmatch(v); len(m) == 2 {
