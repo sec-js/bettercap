@@ -225,7 +225,7 @@ func (mod *ArpSpoofer) Start() error {
 		myMAC := mod.Session.Interface.HW
 		for mod.Running() {
 			for _, address := range spoofed {
-				if net.IP.Equal(address, mod.Session.Gateway.IP) || !mod.Session.Skip(address) {
+				if !mod.Session.Skip(address) {
 					mod.arpSpoofTargets(address, myMAC, true, false)
 				}
 			}
@@ -241,7 +241,7 @@ func (mod *ArpSpoofer) unSpoof() error {
 		mod.Info("restoring ARP cache of %d targets.", nTargets)
 
 		for _, address := range mod.sAddresses {
-			if net.IP.Equal(address, mod.Session.Gateway.IP) || !mod.Session.Skip(address) {
+			if !mod.Session.Skip(address) {
 				if realMAC, err := mod.Session.FindMAC(address, false); err == nil {
 					mod.arpSpoofTargets(address, realMAC, false, false)
 				} else {
