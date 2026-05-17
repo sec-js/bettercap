@@ -826,6 +826,118 @@ func TestArpSpooferEmptyTargets(t *testing.T) {
 	}
 }
 
+func TestArpSpooferNewParams(t *testing.T) {
+	mockSess, _, _ := createMockSession()
+	mod := NewArpSpoofer(mockSess.Session)
+
+	// All new params must be registered in the session env.
+	for _, param := range []string{"arp.spoof.spoofed", "arp.spoof.forwarding", "arp.spoof.interval"} {
+		if !mod.Session.Env.Has(param) {
+			t.Errorf("parameter %s not registered", param)
+		}
+	}
+}
+
+func TestArpSpooferSpoofedParam(t *testing.T) {
+	mockSess, _, _ := createMockSession()
+	mod := NewArpSpoofer(mockSess.Session)
+
+	targetIP := "192.168.1.10"
+	targetMAC, _ := net.ParseMAC("aa:aa:aa:aa:aa:aa")
+	mockSess.Lan.AddIfNew(targetIP, targetMAC.String())
+	mockSess.findMACResults[targetIP] = targetMAC
+
+	// Override the spoofed address to something other than the gateway.
+	mockSess.Env.Set("arp.spoof.targets", targetIP)
+	mockSess.Env.Set("arp.spoof.spoofed", "192.168.1.50")
+
+	if err := mod.Configure(); err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+
+	if len(mod.sAddresses) != 1 {
+		t.Fatalf("expected 1 spoofed address, got %d", len(mod.sAddresses))
+	}
+	if mod.sAddresses[0].String() != "192.168.1.50" {
+		t.Errorf("expected spoofed address 192.168.1.50, got %s", mod.sAddresses[0])
+	}
+}
+
+func TestArpSpooferIntervalParam(t *testing.T) {
+	mockSess, _, _ := createMockSession()
+	mod := NewArpSpoofer(mockSess.Session)
+
+	targetIP := "192.168.1.10"
+	mockSess.Lan.AddIfNew(targetIP, "aa:aa:aa:aa:aa:aa")
+	mockSess.Env.Set("arp.spoof.targets", targetIP)
+	mockSess.Env.Set("arp.spoof.interval", "500")
+
+	if err := mod.Configure(); err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+
+	if mod.intervalMs != 500 {
+		t.Errorf("expected intervalMs=500, got %d", mod.intervalMs)
+	}
+}
+
+func TestArpSpooferForwardingParam(t *testing.T) {
+	t.Run("forwarding_false_disables_forwarding", func(t *testing.T) {
+		mockSess, _, mockFirewall := createMockSession()
+		mockFirewall.forwardingEnabled = true
+		mod := NewArpSpoofer(mockSess.Session)
+
+		targetIP := "192.168.1.10"
+		targetMAC, _ := net.ParseMAC("aa:aa:aa:aa:aa:aa")
+		mockSess.Lan.AddIfNew(targetIP, targetMAC.String())
+		mockSess.findMACResults[targetIP] = targetMAC
+		mockSess.Env.Set("arp.spoof.targets", targetIP)
+		mockSess.Env.Set("arp.spoof.forwarding", "false")
+
+		if err := mod.Start(); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		if mockFirewall.IsForwardingEnabled() {
+			t.Error("forwarding should be disabled when arp.spoof.forwarding=false")
+		}
+
+		if err := mod.Stop(); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+		// Forwarding should be restored to original (true) after Stop.
+		if !mockFirewall.IsForwardingEnabled() {
+			t.Error("forwarding should be restored to its original state (enabled) after Stop")
+		}
+	})
+
+	t.Run("forwarding_true_enables_forwarding", func(t *testing.T) {
+		mockSess, _, mockFirewall := createMockSession()
+		mockFirewall.forwardingEnabled = false
+		mod := NewArpSpoofer(mockSess.Session)
+
+		targetIP := "192.168.1.10"
+		targetMAC, _ := net.ParseMAC("aa:aa:aa:aa:aa:aa")
+		mockSess.Lan.AddIfNew(targetIP, targetMAC.String())
+		mockSess.findMACResults[targetIP] = targetMAC
+		mockSess.Env.Set("arp.spoof.targets", targetIP)
+		mockSess.Env.Set("arp.spoof.forwarding", "true")
+
+		if err := mod.Start(); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		if !mockFirewall.IsForwardingEnabled() {
+			t.Error("forwarding should be enabled when arp.spoof.forwarding=true")
+		}
+
+		if err := mod.Stop(); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+		if mockFirewall.IsForwardingEnabled() {
+			t.Error("forwarding should be restored to its original state (disabled) after Stop")
+		}
+	})
+}
+
 // Benchmarks
 func BenchmarkArpSpooferGetTargets(b *testing.B) {
 	mockSess, _, _ := createMockSession()
